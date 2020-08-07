@@ -5,8 +5,8 @@ import jax.numpy as np
 
 def test_gp():
     model = GP()
-    x = np.linspace(0.0, np.pi, 6)
-    y = np.sin(x)
+    x = np.linspace(0.0, np.pi, 6).reshape(-1, 1)
+    y = np.sin(x).squeeze()
     model.fit(x, y)
     mu, var = model.predict(x)
     assert np.allclose(mu, y, rtol=1e-3, atol=1e-5)

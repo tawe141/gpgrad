@@ -22,7 +22,6 @@ class GP:
         self.x = x
         self.y = y
         self.K = self.kernel(x, x) + self.alpha * np.eye(len(x))
-        self.K_inv = np.linalg.inv(self.K)
 
     def predict(self, x: np.ndarray):
         K_s = self.kernel(x, self.x)

@@ -9,3 +9,4 @@ def test_rbf():
     result = k(a, a)
     assert result.shape == (len(a), len(a))
     assert np.allclose(np.diag(result), 1.0)
+    assert np.allclose(k(a, a), k(a.reshape(-1, 1), a.reshape(-1, 1)))
