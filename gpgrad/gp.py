@@ -9,6 +9,7 @@ class GP:
         self.kernel = kernel()
         self.x = None
         self.y = None
+        self.K = None
 
     def fit(self, x: np.ndarray, y: np.ndarray):
         """
