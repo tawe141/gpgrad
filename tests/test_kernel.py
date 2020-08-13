@@ -19,8 +19,9 @@ def test_rbfgrad():
     a = np.linspace(0, 10).reshape(-1, 1)
     b = np.linspace(0, 10).reshape(-1, 1)
 
-    k = RBFGrad(1.0)
-    result = k(a, b)
+    k = RBF(1.0)
+    gk = GradKernel(k)
+    result = gk(a, b)
     assert result.shape == (2*len(a), 2*len(a))
     # diagonals of kernel matrix should be 1.0
     assert np.allclose(np.diag(result[:len(a), :len(a)]), 1.0)

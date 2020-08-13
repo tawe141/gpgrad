@@ -1,65 +1,73 @@
 import jax.numpy as np
-from jax import jit, jacrev, jacfwd, vmap
+from jax import jit, jacrev, jacfwd, vmap, grad
 from abc import ABC, abstractmethod
 
 
 class Kernel(ABC):
-    def __init__(self, name: str, debug=True):
+    def __init__(self, thetas: np.ndarray, name: str, debug=True):
+        self.thetas = thetas
         self.name = name
+        self.debug = debug
+        self.forward = vmap(
+            vmap(
+                self.forward_,
+                in_axes=(0, None, None)
+            ),
+            in_axes=(None, 0, None)
+        )
+        if debug is False:
+            self.forward = jit(self.forward)
 
     def __call__(self, x1: np.ndarray, x2: np.ndarray):
-        raise NotImplementedError()
+        return self.forward(x1, x2, self.theta)
 
     @abstractmethod
-    def forward(self, x1: np.ndarray, x2: np.ndarray, thetas: np.ndarray):
+    def forward_(self, x1: np.ndarray, x2: np.ndarray, thetas: np.ndarray):
         raise NotImplementedError()
 
 
-# def pairwise_dist(x1: np.ndarray, x2: np.ndarray):
-
-
-
-class RBF(Kernel):
-    def __init__(self, length_scale=1.0):
-        self.length_scale = length_scale
-        super(RBF, self).__init__('RBF')
+class GradKernel:
+    def __init__(self, kernel: Kernel):
+        self.k = kernel
+        self.dkdx1 = vmap(
+            vmap(
+                grad(self.k.forward_, argnums=0),
+                in_axes=(0, None, None)
+            ),
+            in_axes=(None, 0, None)
+        )
+        self.dkdx2 = vmap(
+            vmap(
+                grad(self.k.forward_, argnums=1),
+                in_axes=(0, None, None)
+            ),
+            in_axes=(None, 0, None)
+        )
+        self.dk2dx1dx2 = vmap(
+            vmap(
+                jacrev(
+                    grad(self.k.forward_, argnums=0),
+                    argnums=1
+                ),
+                in_axes=(0, None, None)
+            ),
+            in_axes=(None, 0, None)
+        )
+        if self.k.debug is False:
+            self.dkdx1 = jit(self.dkdx1)
+            self.dkdx2 = jit(self.dkdx2)
+            self.dk2dx1dx2 = jit(self.dk2dx1dx2)
 
     def __call__(self, x1: np.ndarray, x2: np.ndarray):
-        return self.forward(x1, x2, np.array([self.length_scale]))
+        return self.forward(x1, x2, self.k.thetas)
 
     def forward(self, x1: np.ndarray, x2: np.ndarray, thetas: np.ndarray):
-        assert thetas.shape == (1,)
-        length_scale = thetas[0]
-
-        # d = np.linalg.norm(
-        #     np.expand_dims(x1, 0) - np.expand_dims(x2, 1),
-        #     axis=-1
-        # ) / length_scale
-        # return np.exp(-0.5 * (d * d))
-        d = (np.expand_dims(x1, 0) - np.expand_dims(x2, 1)) / length_scale
-        d = d * d
-        d = np.sum(d, axis=-1)
-        return np.exp(-0.5 * d)
-
-
-class RBFGrad(RBF):
-    def __init__(self, length_scale=1.0):
-        super(RBFGrad, self).__init__(length_scale)
-        self.dkdx1 = jacfwd(super(RBFGrad, self).forward, argnums=0)
-        self.dkdx2 = jacfwd(super(RBFGrad, self).forward, argnums=1)
-        self.dk2dx1dx2 = vmap(
-            jacfwd(jacrev(super(RBFGrad, self).forward, argnums=0), argnums=1),
-            in_axes=(0, None, None),
-            out_axes=0
-        )
-
-    def forward(self, x1: np.ndarray, x2: np.ndarray, thetas: np.ndarray):
-        K = super().forward(x1, x2, thetas)
-        dx2 = self.dkdx2(x1, x2, thetas).sum(-2)
+        K = self.k.forward(x1, x2, thetas)
+        dx2 = self.dkdx2(x1, x2, thetas)
         upper = np.concatenate([dx2[:, :, i] for i in range(dx2.shape[-1])], axis=1)
-        dx1 = self.dkdx1(x1, x2, thetas).sum(-2)
+        dx1 = self.dkdx1(x1, x2, thetas)
         left = np.concatenate([dx1[:, :, i] for i in range(dx1.shape[-1])], axis=0)
-        dx1dx2 = self.dk2dx1dx2(x1, x2, thetas).sum(2).sum(-2)
+        dx1dx2 = self.dk2dx1dx2(x1, x2, thetas)
         dx2_concatenated = np.concatenate([
             dx1dx2[:, :, :, i]
             for i in range(dx1dx2.shape[-1])
@@ -79,3 +87,17 @@ class RBFGrad(RBF):
             np.concatenate([left, hess], axis=1)],
             axis=0
         )
+
+
+class RBF(Kernel):
+    def __init__(self, length_scale=1.0, debug=True):
+        self.length_scale = length_scale
+        super(RBF, self).__init__(np.array([length_scale]), 'RBF', debug=debug)
+
+    def forward_(self, x1: np.ndarray, x2: np.ndarray, thetas: np.ndarray):
+        assert thetas.shape == (1,)
+        length_scale = thetas[0]
+
+        dist_sq = np.vdot(x1, x1) + np.vdot(x2, x2) - 2.0 * np.vdot(x1, x2)
+        return np.exp(-0.5 * dist_sq / length_scale / length_scale)
+
