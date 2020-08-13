@@ -45,9 +45,13 @@ class RBF(Kernel):
 class RBFGrad(RBF):
     def __init__(self, length_scale=1.0):
         super(RBFGrad, self).__init__(length_scale)
-        self.dkdx1 = jit(jacfwd(super(RBFGrad, self).forward, argnums=0))
-        self.dkdx2 = jit(jacfwd(super(RBFGrad, self).forward, argnums=1))
-        self.dk2dx1dx2 = jit(jacfwd(jacrev(super(RBFGrad, self).forward, argnums=0), argnums=1))
+        self.dkdx1 = jacfwd(super(RBFGrad, self).forward, argnums=0)
+        self.dkdx2 = jacfwd(super(RBFGrad, self).forward, argnums=1)
+        self.dk2dx1dx2 = vmap(
+            jacfwd(jacrev(super(RBFGrad, self).forward, argnums=0), argnums=1),
+            in_axes=(0, None, None),
+            out_axes=0
+        )
 
     def forward(self, x1: np.ndarray, x2: np.ndarray, thetas: np.ndarray):
         K = super().forward(x1, x2, thetas)
