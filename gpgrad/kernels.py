@@ -19,7 +19,7 @@ class Kernel(ABC):
             self.forward = jit(self.forward)
 
     def __call__(self, x1: np.ndarray, x2: np.ndarray):
-        return self.forward(x1, x2, self.theta)
+        return self.forward(x1, x2, self.thetas)
 
     @abstractmethod
     def forward_(self, x1: np.ndarray, x2: np.ndarray, thetas: np.ndarray):
