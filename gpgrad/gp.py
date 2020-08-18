@@ -1,6 +1,13 @@
 import jax.numpy as np
 from .kernels import RBF, GradKernel, Kernel
-from jax.scipy.linalg import solve
+from jax.scipy.linalg import solve, cho_solve, cho_factor, cholesky, solve_triangular
+from jax import vmap, grad
+
+
+def cholesky_solve(A, b):
+    L = cholesky(A, lower=True)
+    y = solve_triangular(L, b, lower=True)
+    return solve_triangular(L.T, y)
 
 
 class GP:
@@ -45,6 +52,9 @@ class GPGrad:
         self.x_ = None
         self.y = None
         self.K = None
+        # self.predict = vmap(self.predict_)
+        self.predict_dy_ = grad(self.predict_, argnums=0)
+        self.predict_dy = vmap(self.predict_dy_)
 
     def fit(self, x: np.ndarray, y: np.ndarray, dydx: np.ndarray):
         """
@@ -59,6 +69,7 @@ class GPGrad:
         self.x = x
         self.y = np.concatenate((y.reshape(-1, 1), dydx))
         self.K = self.kernel(x, x) + self.alpha * np.eye(len(x) + len(x)*x.shape[1])
+        self.U = cholesky_solve(self.K, self.y)
 
     def predict(self, x: np.ndarray):
         """
@@ -69,7 +80,31 @@ class GPGrad:
         :return:
         """
         K_s = self.kernel.k(x, self.x)
-        dK_s = self.kernel.dkdx2(x, self.x, self.kernel.k.thetas)
+        dK_s = self.kernel.dkdx1(x, self.x, self.kernel.k.thetas)
         dK_s = np.concatenate([dK_s[:, :, i] for i in range(dK_s.shape[2])])
         r = np.concatenate((K_s, dK_s))
-        return solve(self.K, r, sym_pos=True).T @ self.y
+        return r.T @ self.U
+
+    def predict_(self, x: np.ndarray):
+        """
+        Returns mean and covariance for a single example point `x`
+        TODO: Slow, does some operations that should be implemented as part of the kernel. More for testing purposes
+        than anything
+
+        :param x: array of shape `(d, )`, where `d` is the dimensionality of the problem
+        :return: posterior estimation at `x`
+        """
+        f = vmap(self.kernel.k.forward_, (None, 0, None))
+        K_s = f(x, self.x, self.kernel.k.thetas)
+        dK_s = vmap(
+            grad(self.kernel.k.forward_, argnums=1),  # derivative wrt argnums=0 or 1?
+            (None, 0, None)
+        )(x, self.x, self.kernel.k.thetas)
+        r = np.concatenate(
+            (K_s, dK_s.flatten()),
+            axis=0
+        )
+        return (r.T @ self.U)[0]
+
+    # def predict_dy_(self, x: np.ndarray):
+

@@ -13,6 +13,8 @@ def test_rbf():
     assert result.shape == (len(a), len(a))
     assert np.allclose(np.diag(result), 1.0)
     assert np.allclose(k(a, a), k(a.reshape(-1, 1), a.reshape(-1, 1)))
+    # # smallest eigenvalues are negative but close to 0. numerical precision error?
+    # assert (np.linalg.eigvalsh(result) > 0.0).all()
 
 
 def test_rbfgrad():
@@ -31,9 +33,11 @@ def test_rbfgrad():
     # diagonals of hessian wrt x1 and x2 should be 1.0
     assert np.allclose(np.diag(result[len(a):, len(a):]), 1.0)
 
-    # upper right block should be equal to the transpose of the lower left block
+    # upper right block should be equal to the negative transpose of the lower left block
     assert np.allclose(
         result[:len(a), len(a):],
-        result[len(a):, :len(a)].T
+        -result[len(a):, :len(a)].T
     )
+
+    assert (np.linalg.eigvalsh(result + 1e-4 * np.eye(len(result))) > 0.0).all()
 

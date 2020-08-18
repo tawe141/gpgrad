@@ -64,18 +64,18 @@ class GradKernel:
     def forward(self, x1: np.ndarray, x2: np.ndarray, thetas: np.ndarray):
         K = self.k.forward(x1, x2, thetas)
         dx2 = self.dkdx2(x1, x2, thetas)
-        upper = np.concatenate([dx2[:, :, i] for i in range(dx2.shape[-1])], axis=1)
+        upper = np.concatenate([dx2[:, i, :] for i in range(dx2.shape[1])], axis=1)
         dx1 = self.dkdx1(x1, x2, thetas)
-        left = np.concatenate([dx1[:, :, i] for i in range(dx1.shape[-1])], axis=0)
+        left = np.concatenate([dx1[i, :, :] for i in range(dx1.shape[0])], axis=1)
         dx1dx2 = self.dk2dx1dx2(x1, x2, thetas)
         dx2_concatenated = np.concatenate([
-            dx1dx2[:, :, :, i]
-            for i in range(dx1dx2.shape[-1])
+            dx1dx2[i, :, :, :]
+            for i in range(dx1dx2.shape[0])
         ], axis=1)
         hess = np.concatenate([
-            dx2_concatenated[:, :, i]
-            for i in range(dx2_concatenated.shape[-1])
-        ], axis=0)
+            dx2_concatenated[:, i, :]
+            for i in range(dx2_concatenated.shape[1])
+        ], axis=1)
 
         # form the overall covariance matrix
         # [
