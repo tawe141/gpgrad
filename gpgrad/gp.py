@@ -52,7 +52,7 @@ class GPGrad:
         self.x_ = None
         self.y = None
         self.K = None
-        # self.predict = vmap(self.predict_)
+        self.predict = vmap(self.predict_)
         self.predict_dy_ = grad(self.predict_, argnums=0)
         self.predict_dy = vmap(self.predict_dy_)
 
@@ -71,19 +71,19 @@ class GPGrad:
         self.K = self.kernel(x, x) + self.alpha * np.eye(len(x) + len(x)*x.shape[1])
         self.U = cholesky_solve(self.K, self.y)
 
-    def predict(self, x: np.ndarray):
-        """
-        Returns mean and covariance from posterior distribution
-        # TODO: implement covariance
-
-        :param x:
-        :return:
-        """
-        K_s = self.kernel.k(x, self.x)
-        dK_s = self.kernel.dkdx1(x, self.x, self.kernel.k.thetas)
-        dK_s = np.concatenate([dK_s[:, :, i] for i in range(dK_s.shape[2])])
-        r = np.concatenate((K_s, dK_s))
-        return r.T @ self.U
+    # def predict(self, x: np.ndarray):
+    #     """
+    #     Returns mean and covariance from posterior distribution
+    #     # TODO: implement covariance
+    #
+    #     :param x:
+    #     :return:
+    #     """
+    #     K_s = self.kernel.k(x, self.x)
+    #     dK_s = self.kernel.dkdx1(x, self.x, self.kernel.k.thetas)
+    #     dK_s = np.concatenate([dK_s[:, :, i] for i in range(dK_s.shape[2])])
+    #     r = np.concatenate((K_s, dK_s))
+    #     return r.T @ self.U
 
     def predict_(self, x: np.ndarray):
         """

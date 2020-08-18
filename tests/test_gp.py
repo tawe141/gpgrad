@@ -27,7 +27,7 @@ def test_gp():
 
 def test_gpgrad():
     model = GPGrad(kernel=RBF(1e-1))
-    x = np.linspace(0.0, np.pi, 6).reshape(-1, 1)
+    x = np.linspace(0.0, np.pi, 10).reshape(-1, 1)
     y = np.sin(x).squeeze()
     dy = np.cos(x)
     model.fit(x, y, dy)
