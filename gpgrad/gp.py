@@ -1,9 +1,11 @@
 import jax.numpy as np
 from .kernels import RBF, GradKernel, Kernel
 from jax.scipy.linalg import solve, cho_solve, cho_factor, cholesky, solve_triangular
-from jax import vmap, grad
+from jax import vmap, grad, jit, partial
+from typing import Tuple
 
 
+@jit
 def cholesky_solve(A, b):
     L = cholesky(A, lower=True)
     y = solve_triangular(L, b, lower=True)
@@ -30,9 +32,11 @@ class GP:
         self.x = x
         self.y = y
         self.K = self.kernel(x, x) + self.alpha * np.eye(len(x))
+        self.U = solve(self.K, self.y)
 
+    # @partial(jit, static_argnums=(0,))
     def predict(self, x: np.ndarray):
-        K_s = self.kernel(x, self.x)
+        K_s = self.kernel(x, self.x).T
         K_ss = self.kernel(x, x)
 
         solved = solve(self.K, K_s, sym_pos=True).T
@@ -52,9 +56,11 @@ class GPGrad:
         self.x_ = None
         self.y = None
         self.K = None
-        self.predict = vmap(self.predict_)
+        self.predict_mu = vmap(self.predict_)
         self.predict_dy_ = grad(self.predict_, argnums=0)
         self.predict_dy = vmap(self.predict_dy_)
+        # self.predict_dy_ = grad(self.predict_, argnums=0)
+        # self.predict_dy = vmap(self.predict_dy_)
 
     def fit(self, x: np.ndarray, y: np.ndarray, dydx: np.ndarray):
         """
@@ -67,9 +73,10 @@ class GPGrad:
         :return:
         """
         self.x = x
-        self.y = np.concatenate((y.reshape(-1, 1), dydx))
+        # dy = np.concatenate([dydx[:, i] for i in range(dydx.shape[1])])
+        self.y = np.concatenate((y, dydx.T.flatten()))
         self.K = self.kernel(x, x) + self.alpha * np.eye(len(x) + len(x)*x.shape[1])
-        self.U = cholesky_solve(self.K, self.y)
+        self.U = solve(self.K, self.y)
 
     # def predict(self, x: np.ndarray):
     #     """
@@ -85,26 +92,21 @@ class GPGrad:
     #     r = np.concatenate((K_s, dK_s))
     #     return r.T @ self.U
 
-    def predict_(self, x: np.ndarray):
+    def predict_(self, x: np.ndarray) -> float:
         """
         Returns mean and covariance for a single example point `x`
-        TODO: Slow, does some operations that should be implemented as part of the kernel. More for testing purposes
-        than anything
 
         :param x: array of shape `(d, )`, where `d` is the dimensionality of the problem
         :return: posterior estimation at `x`
         """
-        f = vmap(self.kernel.k.forward_, (None, 0, None))
-        K_s = f(x, self.x, self.kernel.k.thetas)
-        dK_s = vmap(
-            grad(self.kernel.k.forward_, argnums=1),  # derivative wrt argnums=0 or 1?
-            (None, 0, None)
-        )(x, self.x, self.kernel.k.thetas)
-        r = np.concatenate(
-            (K_s, dK_s.flatten()),
-            axis=0
-        )
-        return (r.T @ self.U)[0]
+        r = self.kernel.k(self.x, x)
+        dr = self.kernel.dkdx1_a(self.x, x, self.kernel.k.thetas)
+        # dr = np.concatenate([dr[:, i] for i in range(dr.shape[1])])
+        return np.dot(np.concatenate((r, dr.T.flatten())), self.U)
+
+    def predict(self, x: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        return self.predict_mu(x), self.predict_dy(x)
+
 
     # def predict_dy_(self, x: np.ndarray):
 
