@@ -82,7 +82,7 @@ def test_gpgrad_1d():
 
 
 def test_gpgrad_2d():
-    model = GPGrad(kernel=RBF(1, debug=False), debug=False)
+    model = GPGrad(kernel=RBF(1))
 
     x, y = np.meshgrid(np.linspace(-2, 2, 5), np.linspace(-2, 2, 5))
     X = np.stack((x.flatten(), y.flatten()), axis=1)

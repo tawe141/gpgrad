@@ -3,6 +3,11 @@ from jax import jit, jacrev, jacfwd, vmap, grad, partial
 from abc import ABC, abstractmethod
 from .utils import method_jit
 
+"""
+Note to self: the way thetas are passed around here is pretty confusing
+TODO: consider whether any forward methods should take thetas as an argument. 
+use partial()? could get even more convoluted
+"""
 
 class Kernel(ABC):
     def __init__(self, thetas: np.ndarray, name: str, debug=True):
