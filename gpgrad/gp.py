@@ -1,15 +1,9 @@
 import jax.numpy as np
 from .kernels import RBF, GradKernel, Kernel
-from jax.scipy.linalg import solve, cho_solve, cho_factor, cholesky, solve_triangular
+from jax.scipy.linalg import solve
 from jax import vmap, grad, jit, partial
 from typing import Tuple
-
-
-@jit
-def cholesky_solve(A, b):
-    L = cholesky(A, lower=True)
-    y = solve_triangular(L, b, lower=True)
-    return solve_triangular(L.T, y)
+from .utils import method_jit
 
 
 class GP:
@@ -49,18 +43,21 @@ class GP:
 
 class GPGrad:
     # TODO: this should probably inherit from GP
-    def __init__(self, alpha=1e-8, kernel: Kernel = RBF()):
+    def __init__(self, alpha=1e-8, kernel: Kernel = RBF(), debug=True):
         self.alpha = alpha
         self.kernel = GradKernel(kernel)
         self.x = None
-        self.x_ = None
         self.y = None
         self.K = None
+        self.U = None
         self.predict_mu = vmap(self.predict_)
         self.predict_dy_ = grad(self.predict_, argnums=0)
         self.predict_dy = vmap(self.predict_dy_)
-        # self.predict_dy_ = grad(self.predict_, argnums=0)
-        # self.predict_dy = vmap(self.predict_dy_)
+
+        if debug is False:
+            # self.fit = method_jit(self.fit)
+            self.predict_mu = method_jit(self.predict_mu)
+            self.predict_dy = method_jit(self.predict_dy)
 
     def fit(self, x: np.ndarray, y: np.ndarray, dydx: np.ndarray):
         """
@@ -78,20 +75,6 @@ class GPGrad:
         self.K = self.kernel(x, x) + self.alpha * np.eye(len(x) + len(x)*x.shape[1])
         self.U = solve(self.K, self.y)
 
-    # def predict(self, x: np.ndarray):
-    #     """
-    #     Returns mean and covariance from posterior distribution
-    #     # TODO: implement covariance
-    #
-    #     :param x:
-    #     :return:
-    #     """
-    #     K_s = self.kernel.k(x, self.x)
-    #     dK_s = self.kernel.dkdx1(x, self.x, self.kernel.k.thetas)
-    #     dK_s = np.concatenate([dK_s[:, :, i] for i in range(dK_s.shape[2])])
-    #     r = np.concatenate((K_s, dK_s))
-    #     return r.T @ self.U
-
     def predict_(self, x: np.ndarray) -> float:
         """
         Returns mean and covariance for a single example point `x`
@@ -106,7 +89,4 @@ class GPGrad:
 
     def predict(self, x: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         return self.predict_mu(x), self.predict_dy(x)
-
-
-    # def predict_dy_(self, x: np.ndarray):
 

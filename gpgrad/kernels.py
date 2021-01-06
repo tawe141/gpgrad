@@ -1,6 +1,7 @@
 import jax.numpy as np
 from jax import jit, jacrev, jacfwd, vmap, grad, partial
 from abc import ABC, abstractmethod
+from .utils import method_jit
 
 
 class Kernel(ABC):
@@ -18,9 +19,9 @@ class Kernel(ABC):
             in_axes=(0, None, None)
         )
         if debug is False:
-            self.forward_b = jit(self.forward_b)
-            self.forward_a = jit(self.forward_a)
-            self.forward = jit(self.forward)
+            self.forward_b = method_jit(self.forward_b)
+            self.forward_a = method_jit(self.forward_a)
+            self.forward = method_jit(self.forward)
 
     def __call__(self, x1: np.ndarray, x2: np.ndarray):
         if len(x1.shape) == 1 and len(x2.shape) == 2:
@@ -78,9 +79,7 @@ class GradKernel:
             in_axes=(None, 0, None)
         )
         if self.k.debug is False:
-            self.dkdx1 = jit(self.dkdx1)
-            self.dkdx2 = jit(self.dkdx2)
-            self.dk2dx1dx2 = jit(self.dk2dx1dx2)
+            self.forward = method_jit(self.forward)
 
     def __call__(self, x1: np.ndarray, x2: np.ndarray):
         return self.forward(x1, x2, self.k.thetas)
@@ -97,14 +96,7 @@ class GradKernel:
         left = np.concatenate([dx1[:, :, i] for i in range(dx1.shape[2])], axis=0)
         # left = -np.transpose(upper)
         dx1dx2 = self.dk2dx1dx2(x1, x2, thetas)
-        # dx2_concatenated = np.concatenate([
-        #     dx1dx2[i, :, :, :]
-        #     for i in range(dx1dx2.shape[0])
-        # ], axis=2)
-        # hess = np.concatenate([
-        #     dx2_concatenated[i, :, :]
-        #     for i in range(dx2_concatenated.shape[0])
-        # ], axis=0)
+
         hess = np.block([
             [dx1dx2[:, :, i, j] for j in range(dim)]
             for i in range(dim)
@@ -115,11 +107,6 @@ class GradKernel:
         #     [K,       dK/dx2      ],
         #     [dK/dx1,  dK^2/dx1dx2 ]
         # ]
-        # return np.concatenate([
-        #     np.concatenate([K, upper], axis=1),
-        #     np.concatenate([left, hess], axis=1)],
-        #     axis=0
-        # )
         return np.block([
             [K, upper],
             [left, hess]

@@ -180,3 +180,13 @@ def test_rbfgrad_2d():
     assert np.allclose(result[4:, 4:], true_hess)
     assert np.allclose(true_hess, true_hess.T)
     # assert np.allclose(np.diag(result[4:, 4:]), 2.0)
+
+
+def test_jit():
+    k = RBF(debug=False)
+    x = np.array([
+        [1, 2],
+        [2, 3],
+        [5, 1]
+    ])
+    k(x, x)
