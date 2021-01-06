@@ -19,12 +19,12 @@ class Kernel(ABC):
             in_axes=(0, None, None)
         )
         if debug is False:
-            self.forward_b = method_jit(self.forward_b)
-            self.forward_a = method_jit(self.forward_a)
-            self.forward = method_jit(self.forward)
+            self.__call__ = method_jit(self.__call__)
 
     def __call__(self, x1: np.ndarray, x2: np.ndarray):
-        if len(x1.shape) == 1 and len(x2.shape) == 2:
+        if len(x1.shape) == 1 and len(x2.shape) == 1:
+            return self.forward_(x1, x2, self.thetas)
+        elif len(x1.shape) == 1 and len(x2.shape) == 2:
             return self.forward_b(x1, x2, self.thetas)
         elif len(x2.shape) == 1 and len(x1.shape) == 2:
             return self.forward_a(x1, x2, self.thetas)

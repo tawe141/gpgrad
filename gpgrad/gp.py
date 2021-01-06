@@ -7,12 +7,18 @@ from .utils import method_jit
 
 
 class GP:
-    def __init__(self, alpha=1e-8, kernel: Kernel = RBF()):
+    def __init__(self, alpha=1e-8, kernel: Kernel = RBF(), debug=True):
         self.alpha = alpha
         self.kernel = kernel
         self.x = None
         self.y = None
         self.K = None
+        self.predict_mu = vmap(self.predict_)
+        self.predict_var = vmap(self.predict_var_)
+
+        if debug is False:
+            self.predict_mu = method_jit(self.predict_mu)
+            self.predict_var = method_jit(self.predict_var)
 
     def fit(self, x: np.ndarray, y: np.ndarray):
         """
@@ -28,17 +34,26 @@ class GP:
         self.K = self.kernel(x, x) + self.alpha * np.eye(len(x))
         self.U = solve(self.K, self.y)
 
-    # @partial(jit, static_argnums=(0,))
+    # # @partial(jit, static_argnums=(0,))
+    # def predict(self, x: np.ndarray):
+    #     K_s = self.kernel(x, self.x).T
+    #     K_ss = self.kernel(x, x)
+    #
+    #     solved = solve(self.K, K_s, sym_pos=True).T
+    #
+    #     mu = solved @ self.y
+    #     cov = K_ss - (solved @ K_s)
+    #
+    #     return mu, cov
+    def predict_(self, x: np.ndarray) -> float:
+        return self.kernel(x, self.x) @ self.U
+
+    def predict_var_(self, x: np.ndarray) -> float:
+        K_train = self.kernel(x, self.x)
+        return self.kernel(x, x) - K_train.T @ solve(self.K, K_train)
+
     def predict(self, x: np.ndarray):
-        K_s = self.kernel(x, self.x).T
-        K_ss = self.kernel(x, x)
-
-        solved = solve(self.K, K_s, sym_pos=True).T
-
-        mu = solved @ self.y
-        cov = K_ss - (solved @ K_s)
-
-        return mu, cov
+        return self.predict_mu(x), self.predict_var(x)
 
 
 class GPGrad:

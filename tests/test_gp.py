@@ -47,6 +47,7 @@ def test_gp_2d():
     model.fit(X, z)
     mu, var = model.predict(X)
     assert np.allclose(mu, z)
+    assert np.allclose(var, np.zeros_like(var), atol=1e-6)
 
 
 def test_gpgrad_1d():
