@@ -1,13 +1,39 @@
 import jax.numpy as np
 from .kernels import RBF, GradKernel, Kernel
 from jax.scipy.linalg import solve
-from jax import vmap, grad, jit, partial
+# from jax.scipy.optimize import minimize
+from scipy.optimize import minimize
+from jax import vmap, grad, jit, partial, hessian
 from typing import Tuple
 from .utils import method_jit
 
 
+@jit
+def add_jitter(mat: np.ndarray, alpha: float) -> np.ndarray:
+    """
+    Adds "jitter", a small number along the diagonal of `mat` to increase numerical stability upon inversion of `mat`.
+    Increase `alpha` if `mat` is ill-conditioned.
+    :param mat: np.ndarray
+    :param alpha: float
+    :return:
+    """
+    return mat + alpha * np.eye(len(mat))
+
+
+@jit
+def jit_solve(A: np.ndarray, b: np.ndarray, **kwargs) -> np.ndarray:
+    """
+    JIT compiled version of `jax.scipy.linalg.solve`. Used in the `fit` function because `GP.fit` cannot be JITed
+    :param A: rank 2 matrix
+    :param b: vector
+    :param kwargs: additional arguments to be passed to `jax.scipy.linalg.solve`
+    :return: np.ndarray, A^-1 @ b
+    """
+    return solve(A, b, **kwargs)
+
+
 class GP:
-    def __init__(self, alpha=1e-8, kernel: Kernel = RBF(), debug=True):
+    def __init__(self, alpha: float = 1e-8, kernel: Kernel = RBF(), debug: bool = True):
         """
         Constructor for base Gaussian process class.
 
@@ -41,8 +67,10 @@ class GP:
         self.x = x
         self.y = y
         self.K = self.kernel(x, x)
-        self.K = self.K + self.alpha * np.eye(len(self.K))
-        self.U = solve(self.K, self.y)
+        # self.K = self.K + self.alpha * np.eye(len(self.K))
+        self.K = add_jitter(self.K, self.alpha)
+        # self.U = solve(self.K, self.y)
+        self.U = jit_solve(self.K, self.y)
 
     def predict_(self, x: np.ndarray) -> float:
         """
@@ -71,6 +99,30 @@ class GP:
         :return:
         """
         return self.predict_mu(x), self.predict_var(x)
+
+    def nll(self, thetas):
+        self.kernel.thetas = thetas
+        self.fit(self.x, self.y)
+        s, logdet = np.linalg.slogdet(self.K)
+        return np.vdot(self.y, self.U) + logdet
+
+    def _optimize_theta(self, init: np.ndarray = None):
+        jac_fn = jit(grad(self.nll))
+        hess_fn = jit(hessian(self.nll))
+        if init is None:
+            init = self.kernel.thetas
+        res = minimize(
+            self.nll,
+            jac=jac_fn,
+            hess=hess_fn,
+            x0=init,
+            method='BFGS',
+            options={
+                'disp': 1
+            }
+        )
+        print(res)
+        self.kernel.thetas = np.array(res.x)
 #
 #
 # class NewGPGrad(GP):
@@ -100,7 +152,6 @@ class GP:
 
 
 class GPGrad:
-    # TODO: this should probably inherit from GP
     def __init__(self, alpha=1e-8, kernel: Kernel = RBF(), debug=True):
         self.alpha = alpha
         self.kernel = GradKernel(kernel)
@@ -130,8 +181,8 @@ class GPGrad:
         self.x = x
         # dy = np.concatenate([dydx[:, i] for i in range(dydx.shape[1])])
         self.y = np.concatenate((y, dydx.T.flatten()))
-        self.K = self.kernel(x, x) + self.alpha * np.eye(len(x) + len(x)*x.shape[1])
-        self.U = solve(self.K, self.y)
+        self.K = add_jitter(self.kernel(x, x), self.alpha)
+        self.U = jit_solve(self.K, self.y)
 
     def predict_(self, x: np.ndarray) -> float:
         """

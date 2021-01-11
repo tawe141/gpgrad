@@ -4,6 +4,10 @@ from gpgrad.kernels import RBF
 import jax.numpy as np
 from jax import jit, vmap, grad, jacfwd
 from functools import reduce
+import numpy as onp
+# use sklearn's GPs as ground truth
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import RBF as SklRBF
 
 
 def mean_squared_error(x, y):
@@ -38,7 +42,7 @@ def test_gp():
 
 
 def test_gp_2d():
-    model = GP(kernel=RBF(1.0, debug=False))
+    model = GP(kernel=RBF(1.0, debug=False), debug=False)
 
     x, y = np.meshgrid(np.linspace(-2, 2, 5), np.linspace(-2, 2, 5))
     X = np.stack((x.flatten(), y.flatten()), axis=1)
@@ -48,6 +52,29 @@ def test_gp_2d():
     mu, var = model.predict(X)
     assert np.allclose(mu, z)
     assert np.allclose(var, np.zeros_like(var), atol=1e-6)
+
+
+def test_gp_optimize_thetas():
+    model = GP(kernel=RBF(1e-1), alpha=1e-5)
+    x = np.linspace(0.0, np.pi, 10).reshape(-1, 1)
+    y = np.sin(x).squeeze()
+    model.fit(x, y)
+
+    test_x = np.linspace(0.0, np.pi, 50).reshape(-1, 1)
+    test_y = np.sin(test_x).squeeze()
+    predict_before_opt, _ = model.predict(test_x)
+
+    mse1 = mean_squared_error(predict_before_opt, test_y)
+
+    model._optimize_theta()
+    predict_after_opt, _ = model.predict(test_x)
+    mse2 = mean_squared_error(predict_after_opt, test_y)
+    assert mse2 < mse1
+
+    skl = GaussianProcessRegressor(kernel=SklRBF(length_scale_bounds=(0.001, 10000.)), alpha=1e-5)
+    skl.fit(x, y)
+    # TODO: figure out why the length scales differ by so much
+    assert np.allclose(model.kernel.thetas, np.exp(skl.kernel_.theta), atol=0.1)
 
 
 def test_gpgrad_1d():

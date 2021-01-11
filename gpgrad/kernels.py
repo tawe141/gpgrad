@@ -33,8 +33,10 @@ class Kernel(ABC):
             return self.forward_b(x1, x2, self.thetas)
         elif len(x2.shape) == 1 and len(x1.shape) == 2:
             return self.forward_a(x1, x2, self.thetas)
-        else:
+        elif len(x2.shape) == 2 and len(x1.shape) == 2:
             return self.forward(x1, x2, self.thetas)
+        else:
+            raise RuntimeError('Unsupported dimensionality')
 
     @abstractmethod
     def forward_(self, x1: np.ndarray, x2: np.ndarray, thetas: np.ndarray):
