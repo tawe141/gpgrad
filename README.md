@@ -1,0 +1,6 @@
+# GPGrad
+A rather naive implementation of a Gaussian process and its gradient-enhanced cousin. 
+
+Gaussian processes are excellent at modelling arbitrary functions with few data points and also provides uncertainty quantification. However, many application scenarios, like molecular geometry optimization, also have derivative information that's easily obtainable. Utilizing this information makes modelling even more efficient, as derivatives often describe the locality around a given training example well. Gradient-enhanced Gaussian processes make use of this information in a co-kriging-like method by constructing a block covariance matrix and regressing against both the output and its gradient wrt. the input. The biggest drawback to this method is the increased size of the covariance matrix and how quickly it can become ill-conditioned. 
+
+This package was lovingly made with JAX, a library that follows numpy conventions with easy to use auto-differentiation and JIT compiling. This allows for easy implementation without the need to find gradients by hand and potentially offloading computations onto a GPU. Furthermore, one can implement their own kernel functions beyond RBF without having to derive gradients. 
