@@ -21,15 +21,30 @@ def add_jitter(mat: np.ndarray, alpha: float) -> np.ndarray:
 
 
 @jit
-def jit_solve(A: np.ndarray, b: np.ndarray, **kwargs) -> np.ndarray:
+def jit_solve(A: np.ndarray, b: np.ndarray) -> np.ndarray:
     """
     JIT compiled version of `jax.scipy.linalg.solve`. Used in the `fit` function because `GP.fit` cannot be JITed
     :param A: rank 2 matrix
     :param b: vector
-    :param kwargs: additional arguments to be passed to `jax.scipy.linalg.solve`
     :return: np.ndarray, A^-1 @ b
     """
-    return solve(A, b, **kwargs)
+    return solve(A, b, sym_pos=True)
+
+
+def posdef_logdet(m: np.ndarray) -> float:
+    """
+    Returns the log-determinant of a positive definite matrix
+    :param m:
+    :return:
+    """
+    L = np.linalg.cholesky(m)
+    return 2 * np.sum(np.log(np.diag(L)))
+
+
+@jit
+def _nll(y: np.ndarray, K: np.ndarray, Kinv_y: np.ndarray) -> float:
+    ld = posdef_logdet(K)
+    return 0.5 * (np.vdot(y, Kinv_y) + ld)
 
 
 class GP:
@@ -66,10 +81,7 @@ class GP:
         """
         self.x = x
         self.y = y
-        self.K = self.kernel(x, x)
-        # self.K = self.K + self.alpha * np.eye(len(self.K))
-        self.K = add_jitter(self.K, self.alpha)
-        # self.U = solve(self.K, self.y)
+        self.K = add_jitter(self.kernel(x, x), self.alpha)
         self.U = jit_solve(self.K, self.y)
 
     def predict_(self, x: np.ndarray) -> float:
@@ -103,8 +115,9 @@ class GP:
     def nll(self, thetas):
         self.kernel.thetas = thetas
         self.fit(self.x, self.y)
-        s, logdet = np.linalg.slogdet(self.K)
-        return np.vdot(self.y, self.U) + logdet
+        # logdet = posdef_logdet(self.K)
+        # return 0.5 * (np.vdot(self.y, self.U) + logdet)
+        return _nll(self.y, self.K, self.U)
 
     def _optimize_theta(self, init: np.ndarray = None):
         jac_fn = jit(grad(self.nll))
@@ -116,7 +129,7 @@ class GP:
             jac=jac_fn,
             hess=hess_fn,
             x0=init,
-            method='BFGS',
+            method='Newton-CG',
             options={
                 'disp': 1
             }
@@ -152,10 +165,19 @@ class GP:
 
 
 class GPGrad:
+    alpha: float
+    kernel: GradKernel
+    x: np.ndarray
+    dydx: np.ndarray
+    y: np.ndarray
+    K: np.ndarray
+    U: np.ndarray
+
     def __init__(self, alpha=1e-8, kernel: Kernel = RBF(), debug=True):
         self.alpha = alpha
         self.kernel = GradKernel(kernel)
         self.x = None
+        self.dydx = None
         self.y = None
         self.K = None
         self.U = None
@@ -179,8 +201,12 @@ class GPGrad:
         :return:
         """
         self.x = x
+        self.dydx = dydx
         # dy = np.concatenate([dydx[:, i] for i in range(dydx.shape[1])])
-        self.y = np.concatenate((y, dydx.T.flatten()))
+        self._fit(x, np.concatenate((y, dydx.T.flatten())))
+
+    def _fit(self, x: np.ndarray, y: np.ndarray):
+        self.y = y
         self.K = add_jitter(self.kernel(x, x), self.alpha)
         self.U = jit_solve(self.K, self.y)
 
@@ -198,4 +224,27 @@ class GPGrad:
 
     def predict(self, x: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         return self.predict_mu(x), self.predict_dy(x)
+
+    def nll(self, thetas):
+        self.kernel.k.thetas = thetas
+        self._fit(self.x, self.y)
+        return _nll(self.y, self.K, self.U)
+
+    def _optimize_theta(self, init: np.ndarray = None):
+        jac_fn = jit(grad(self.nll))
+        # hess_fn = jit(hessian(self.nll))
+        if init is None:
+            init = self.kernel.k.thetas
+        res = minimize(
+            self.nll,
+            jac=jac_fn,
+            # hess=hess_fn,
+            x0=init,
+            method='BFGS',
+            options={
+                'disp': 1
+            }
+        )
+        print(res)
+        self.kernel.thetas = np.array(res.x)
 

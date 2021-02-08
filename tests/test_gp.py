@@ -73,8 +73,7 @@ def test_gp_optimize_thetas():
 
     skl = GaussianProcessRegressor(kernel=SklRBF(length_scale_bounds=(0.001, 10000.)), alpha=1e-5)
     skl.fit(x, y)
-    # TODO: figure out why the length scales differ by so much
-    assert np.allclose(model.kernel.thetas, np.exp(skl.kernel_.theta), atol=0.1)
+    assert np.allclose(model.kernel.thetas, np.exp(skl.kernel_.theta), atol=0.01)
 
 
 def test_gpgrad_1d():
@@ -133,4 +132,21 @@ def test_gpgrad_predict_dy():
     model.fit(x, y, dy)
 
     assert np.allclose(model.predict_(x[0]), 0.0)
-    assert np.allclose(model.predict_dy_(x[0]), 1.0, atol=1e-1)  # why is this so inaccurate?
+    assert np.allclose(model.predict_dy_(x[0]), 1.0)
+
+
+def test_gpgrad_optimize_thetas():
+    model = GPGrad(kernel=RBF(1e-1), alpha=1e-4)
+    x = np.linspace(0.0, np.pi, 4).reshape(-1, 1)
+    y = np.sin(x).squeeze()
+    dy = np.cos(x)
+    model.fit(x, y, dy)
+
+    test_x = np.linspace(0.0, np.pi, 50).reshape(-1, 1)
+    test_y = np.sin(test_x)
+    mse1 = mean_squared_error(model.predict_mu(test_x), test_y)
+
+    model._optimize_theta()
+    mse2 = mean_squared_error(model.predict_mu(test_x), test_y)
+
+    assert mse2 < mse1
