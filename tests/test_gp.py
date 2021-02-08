@@ -106,6 +106,11 @@ def test_gpgrad_1d():
 
     assert gpgrad_mse < normal_mse
 
+    # gpgrad variance at training points should be 0
+    cov = model.predict_cov(x)
+    variance = np.diag(cov)[:4]
+    assert np.allclose(variance, 0, rtol=1e-8, atol=1e-8)
+
 
 def test_gpgrad_2d():
     model = GPGrad(kernel=RBF(1))
