@@ -184,7 +184,7 @@ class GPGrad:
         self.predict_mu = vmap(self.predict_)
         self.predict_dy_ = grad(self.predict_, argnums=0)
         self.predict_dy = vmap(self.predict_dy_)
-        # self.predict_var = vmap(self.predict_var_)
+        self.predict_var = vmap(self.predict_var_)
 
         if debug is False:
             # self.fit = method_jit(self.fit)
@@ -224,14 +224,15 @@ class GPGrad:
         # dr = np.concatenate([dr[:, i] for i in range(dr.shape[1])])
         return np.dot(np.concatenate((r, dr.T.flatten())), self.U)
 
-    def predict_cov(self, x: np.ndarray) -> float:
+    def predict_var_(self, x: np.ndarray) -> float:
         """
         Returns the variance of the prediction at x
         :param x:
         :return:
         """
-        K_train = self.kernel(x, self.x)
-        return self.kernel(x, x) - K_train.T @ solve(self.K, K_train)
+        K_train = self.kernel.k(x, self.x)
+        K = self.K[:len(self.x), :len(self.x)]
+        return self.kernel.k(x, x) - K_train.T @ solve(K, K_train)
 
     def predict(self, x: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         return self.predict_mu(x), self.predict_dy(x)

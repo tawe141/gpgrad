@@ -107,9 +107,8 @@ def test_gpgrad_1d():
     assert gpgrad_mse < normal_mse
 
     # gpgrad variance at training points should be 0
-    cov = model.predict_cov(x)
-    variance = np.diag(cov)[:4]
-    assert np.allclose(variance, 0, rtol=1e-8, atol=1e-8)
+    variance = model.predict_var(x)
+    assert np.allclose(variance, 0)
 
 
 def test_gpgrad_2d():
@@ -121,8 +120,9 @@ def test_gpgrad_2d():
     dz = smoothed_herbie_dy(X)
 
     model.fit(X, z, dz)
-    # prediction = model.predict_(X[0])
-    # assert np.isclose(prediction, z[0])
+    prediction = model.predict_(X[0])
+    assert np.isclose(prediction, z[0], rtol=1e-4)
+    assert np.isclose(model.predict_var_(X[0]), 0)
 
     mu, mu_d = model.predict(X)
     assert np.allclose(mu, z, atol=1e-4)
