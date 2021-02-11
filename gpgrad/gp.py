@@ -192,7 +192,7 @@ class GPGrad:
             self.predict_dy = method_jit(self.predict_dy)
             self.predict_var = method_jit(self.predict_var)
 
-    def fit(self, x: np.ndarray, y: np.ndarray, dydx: np.ndarray):
+    def fit(self, x: np.ndarray, y: np.ndarray, dydx: np.ndarray, optimize_thetas: bool = False):
         """
         Obtains the hyperparameters that maximizes the log-likelihood of the observations
         TODO: implement this; current implementation only saves x, y, and dydx without optimizing hyperparams
@@ -206,6 +206,8 @@ class GPGrad:
         self.dydx = dydx
         # dy = np.concatenate([dydx[:, i] for i in range(dydx.shape[1])])
         self._fit(x, np.concatenate((y, dydx.T.flatten())))
+        if optimize_thetas:
+            self._optimize_theta()
 
     def _fit(self, x: np.ndarray, y: np.ndarray):
         self.y = y
